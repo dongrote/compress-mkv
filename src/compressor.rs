@@ -1,40 +1,27 @@
-use std::error::Error;
 use std::path::PathBuf;
-use std::fmt::{Display, Formatter, Result};
+use crate::ffmpeg::compressor::{CompressorOptions, FFmpegCompressor};
+use crate::error::{CompressorError, InputParseError};
+use crate::ffmpeg::parameter_factories::av1::Av1ParameterFactory;
+use crate::ffmpeg::parameter_factories::hevc::HevcParameterFactory;
+use crate::ffmpeg::parameter_factories::ParameterFactory;
 
-use crate::ffmpeg::compressors::{CompressorOptions, FFmpegCompressor, FFmpegCompressorFactory};
-
-#[derive(Debug)]
-pub struct CompressorError {
-}
-
-impl Error for CompressorError {
-    fn description(&self) -> &str {
-        "The compressor experienced and error."
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
-        None
-    }
-
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
-impl Display for CompressorError {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "ruh roh")
-    }
-}
-
-pub fn compress_file(input: &PathBuf, _output: &PathBuf, options: &CompressorOptions) -> std::result::Result<(), Box<dyn Error>> {
-    if let Ok(compressor) = FFmpegCompressorFactory::create_compressor("av1") {
+pub fn compress_file(input: &PathBuf, _output: &PathBuf, options: &CompressorOptions) -> std::result::Result<(), CompressorError> {
+    if let Ok(parameters) = create_parameter_factory(input, options) {
+        let compressor = FFmpegCompressor::new();
         let output = generate_output_filename(&input, &options.codec);
-        compressor.compress(input, &output, options)?;
+        compressor.compress(input, &output, &parameters)?;
         Ok(())
     } else {
-        Err(Box::new(CompressorError { }))
+        Err(CompressorError::for_file(input, &format!("Unable to create {} compressor.", options.codec)))
+    }
+}
+
+fn create_parameter_factory(input: &PathBuf, options: &CompressorOptions) -> Result<Box<dyn ParameterFactory>, InputParseError> {
+    dbg!(options);
+    match options.codec.as_str() {
+        "av1" => Ok(Box::new(Av1ParameterFactory::new(options))),
+        "hevc" => Ok(Box::new(HevcParameterFactory::new(options))),
+        _ => Err(InputParseError::for_file(input, &format!("Unsupported output codec: {}.", options.codec))),
     }
 }
 

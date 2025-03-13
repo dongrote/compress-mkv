@@ -1,6 +1,7 @@
 use std::process::Command;
-pub mod compressors;
+pub mod compressor;
 pub mod probe;
+pub mod parameter_factories;
 
 pub struct FFmpeg {
 }
