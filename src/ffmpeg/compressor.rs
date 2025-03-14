@@ -1,5 +1,8 @@
-use std::{io::{BufRead, BufReader}, path::PathBuf, process::{Command, Stdio}};
+use std::cell::RefCell;
+use std::{io::{BufRead, BufReader}, path::PathBuf, process::{Child, Command, Stdio}};
 use std::fs;
+use std::rc::Rc;
+use std::sync::mpsc;
 use kdam::{term, tqdm, BarExt};
 use human_repr::HumanCount;
 use crate::error::CompressorError;
@@ -24,6 +27,10 @@ impl CompressionProgress {
     }
 }
 
+enum FFmpegStdoutResult {
+    Continue,
+    Render,
+}
 
 #[derive(Debug)]
 pub struct CompressorOptions {
@@ -34,10 +41,17 @@ pub struct CompressorOptions {
 }
 
 pub struct FFmpegCompressor {
+    events: Rc<RefCell<mpsc::Receiver<bool>>>,
+    _should_stop: bool,
 }
 
 impl FFmpegCompressor {
-    pub fn new() -> Self { FFmpegCompressor { } }
+    pub fn new(events: Rc<RefCell<mpsc::Receiver<bool>>>) -> Self {
+        FFmpegCompressor {
+            events,
+            _should_stop: false,
+        }
+    }
 
     pub fn compress(&self, input: &PathBuf, output: &PathBuf, parameters: &Box<dyn ParameterFactory>) -> Result<(), CompressorError> {
         let mut args = vec![
@@ -82,27 +96,21 @@ impl FFmpegCompressor {
             let stdout_reader = BufReader::new(stdout);
             for line in stdout_reader.lines() {
                 if let Ok(l) = line {
-                    let parts: Vec<&str> = l.split('=').collect();
-                    if parts.len() < 2 {
-                        continue;
-                    }
-                    match parts[0] {
-                        "fps" => progress.fps = parts[1].parse().unwrap_or(progress.fps),
-                        "frame" => progress.frame = parts[1].parse().unwrap_or(progress.frame),
-                        "total_size" => progress.total_size = parts[1].parse().unwrap_or(progress.total_size),
-                        "progress" => {
+                    match self.handle_ffmpeg_stdout_line(l, &mut progress) {
+                        FFmpegStdoutResult::Continue => continue,
+                        FFmpegStdoutResult::Render => {
                             pbar.set_postfix(format!("{} ({})",
                                 progress.total_size.human_count_bytes(),
                                 predict_compressed_size(progress.total_size, total_frames, progress.frame).human_count_bytes()));
                             let _ = pbar.update_to(progress.frame);
-                            ()
                         },
-                        _ => continue,
                     }
                 }
+
+                self.check_for_stop(&mut child);
             }
 
-            println!("");
+            println!("Waiting for ffmpeg to exit.");
             if let Ok(status) = child.wait() {
                 match status.success() {
                     true => Ok(()),
@@ -122,6 +130,44 @@ impl FFmpegCompressor {
         }
     }
 
+    fn handle_ffmpeg_stdout_line(&self, line: String, progress: &mut CompressionProgress) -> FFmpegStdoutResult {
+        let parts: Vec<&str> = line.split('=').collect();
+        if parts.len() == 2 {
+            match parts[0] {
+                "fps" => {
+                    progress.fps = parts[1].parse().unwrap_or(progress.fps);
+                    FFmpegStdoutResult::Continue
+                },
+                "frame" => {
+                    progress.frame = parts[1].parse().unwrap_or(progress.frame);
+                    FFmpegStdoutResult::Continue
+                },
+                "total_size" => {
+                    progress.total_size = parts[1].parse().unwrap_or(progress.total_size);
+                    FFmpegStdoutResult::Continue
+                },
+                "progress" => FFmpegStdoutResult::Render,
+                _ => FFmpegStdoutResult::Continue,
+            }
+        } else {
+            FFmpegStdoutResult::Continue
+        }
+    }
+
+    fn check_for_stop(&self, child: &mut Child) {
+        if let Ok(rx) = self.events.try_borrow_mut() {
+            if let Ok(stop) = rx.try_recv() {
+                if stop {
+                    println!("Caught stop signal; killing ffmpeg!");
+                    if let Err(err) = child.kill() {
+                        println!("error killing ffmpeg process ({}) {err:?}", child.id());
+                    } else {
+                        println!("killed ffmpeg process ({})", child.id());
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn get_total_frames(input: &PathBuf) -> usize {
