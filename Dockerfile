@@ -1,4 +1,7 @@
 FROM ghcr.io/linuxcontainers/debian-slim:latest AS build-ffmpeg
+ARG SVTAV1_COMMIT_HASH=1ceddd883328f923df73cbaca10e11f5f8061a71
+ARG FFMPEG_COMMIT_HASH=26c5d8cf5d6dcd520e781754d986e9907d74270e
+ARG FDKAAC_COMMIT_HASH=2ef9a141c40bf254bde7d22c197c615db5b265ed
 ARG DEBIAN_FRONTEND=noninteractive
 WORKDIR /root
 RUN apt-get update -qq && apt-get -y install \
@@ -43,7 +46,15 @@ RUN apt-get -y install libopus-dev
 
 ## build SVT-AV1
 # libsvtav1 (--enable-libstvav1)  [encoder only]
-RUN git clone --depth=1 https://gitlab.com/AOMediaCodec/SVT-AV1.git
+## build libsvtav1
+## checkout libsvtav1 commit hash $SVTAV1_COMMIT_HASH using sparse checkout
+RUN mkdir SVT-AV1 && \
+  cd SVT-AV1 && \
+  git init && \
+  git remote add origin https://gitlab.com/AOMediaCodec/SVT-AV1.git && \
+  git fetch origin $SVTAV1_COMMIT_HASH && \
+  git checkout FETCH_HEAD
+# RUN git clone --depth=1 https://gitlab.com/AOMediaCodec/SVT-AV1.git
 RUN cd SVT-AV1/Build && \
   cmake .. -G"Unix Makefiles" -DCMAKE_BUILD_TYPE=Release && \
   make -j $(nproc) && make install
@@ -53,7 +64,15 @@ RUN apt-get -y install libdav1d-dev
 # -- no deps
 
 ## build libfdk-aac
-RUN git clone --depth 1 https://github.com/mstorsjo/fdk-aac
+## checkout fdk-aac commit hash $FDKAAC_COMMIT_HASH using sparse checkout
+RUN mkdir fdk-aac && \
+  cd fdk-aac && \
+  git init && \
+  git remote add origin https://github.com/mstorsjo/fdk-aac && \
+  git fetch origin $FDKAAC_COMMIT_HASH && \
+  git checkout FETCH_HEAD
+
+# RUN git clone --depth 1 https://github.com/mstorsjo/fdk-aac
 RUN cd fdk-aac && \
     autoreconf -fiv && \
     ./configure && \
@@ -61,8 +80,15 @@ RUN cd fdk-aac && \
     make install
 
 ## build ffmpeg
-RUN mkdir -p ffmpeg-sources bin
-RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg ffmpeg-sources/ffmpeg
+RUN mkdir -p ffmpeg-sources/ffmpeg bin
+
+## checkout ffmpeg commit hash $FFMPEG_COMMIT_HASH using sparse checkout
+RUN cd ffmpeg-sources/ffmpeg && \
+  git init && \
+  git remote add origin https://github.com/FFmpeg/FFmpeg && \
+  git fetch origin $FFMPEG_COMMIT_HASH && \
+  git checkout FETCH_HEAD
+## RUN git clone --depth=1 https://github.com/FFmpeg/FFmpeg ffmpeg-sources/ffmpeg
 RUN cd ffmpeg-sources/ffmpeg && \
   PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig:/usr/local/lib/pkgconfig" LD_LIBRARY_PATH="/usr/local/lib" ./configure \
   --prefix="$HOME/ffmpeg_build" \
@@ -92,7 +118,9 @@ make install
 
 FROM rust AS rust-build
 WORKDIR /app
-COPY * /app/
+COPY Cargo.toml Cargo.lock /app/
+COPY src/ /app/src/
+RUN cat Cargo.toml
 RUN cargo b -r
 
 FROM ghcr.io/linuxcontainers/debian-slim:latest
