@@ -21,7 +21,7 @@ fn main() -> ExitCode {
     let (args, _rest) = opts! {
         synopsis "Compress mkv files for use by Jellyfin/Emby/etc";
         opt sample:bool=false, desc:"Transcode a small sample. (not implemented)";
-        opt dry_run:bool=false, desc:"Describe what would be done, but don't actually do anything. (not implemented)";
+        opt dry_run:bool=false, desc:"Describe what would be done, but don't actually do anything.";
         opt recursive:bool=false, desc:"Recurse into subdirectories. (not implemented)";
         opt codec:String=String::from("av1"), desc:"Codec to use for compression. [av1, hevc]";
         opt fast:bool=false, desc:"Use faster encoding parameters.";
