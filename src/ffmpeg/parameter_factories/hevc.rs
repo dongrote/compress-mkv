@@ -10,8 +10,8 @@ pub struct HevcParameterFactory {
 impl HevcParameterFactory {
     pub fn new(options: &CompressorOptions) -> Self {
         HevcParameterFactory {
-            crf: if options.fast { 35 } else { 25 },
-            preset: if options.fast { String::from("faster") } else { String::from("slower") },
+            crf: if options.fast { 35 } else { 20 },
+            preset: if options.fast { String::from("veryfast") } else { String::from("slower") },
         }
     }
 }

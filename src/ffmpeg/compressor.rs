@@ -42,22 +42,21 @@ pub struct CompressorOptions {
 
 pub struct FFmpegCompressor {
     events: Rc<RefCell<mpsc::Receiver<bool>>>,
+    dry_run: bool,
     _should_stop: bool,
 }
 
 impl FFmpegCompressor {
-    pub fn new(events: Rc<RefCell<mpsc::Receiver<bool>>>) -> Self {
+    pub fn new(options: &CompressorOptions, events: Rc<RefCell<mpsc::Receiver<bool>>>) -> Self {
         FFmpegCompressor {
             events,
+            dry_run: options.dry_run,
             _should_stop: false,
         }
     }
 
     pub fn compress(&self, input: &PathBuf, output: &PathBuf, parameters: &Box<dyn ParameterFactory>) -> Result<(), CompressorError> {
         let mut args = vec![
-            PathBuf::from("-hide_banner"), PathBuf::from("-nostats"),
-            PathBuf::from("-loglevel"), PathBuf::from("warning"),
-            PathBuf::from("-progress"), PathBuf::from("pipe:1"),
             PathBuf::from("-i"), PathBuf::from(input),
         ];
 
@@ -77,6 +76,20 @@ impl FFmpegCompressor {
         let input_size = get_file_size(input);
 
         println!("ffmpeg {}", args.iter().map(|s| format!("{:?}", s)).collect::<Vec<String>>().join(" "));
+
+        // insert our pipe processing magic after showing the user the ffmpeg
+        // command in case they want to copypasta it for use on their own
+        args.insert(0, PathBuf::from("pipe:1"));
+        args.insert(0, PathBuf::from("-progress"));
+        args.insert(0, PathBuf::from("warning"));
+        args.insert(0, PathBuf::from("-loglevel"));
+        args.insert(0, PathBuf::from("-nostats"));
+        args.insert(0, PathBuf::from("-hide_banner"));
+
+        if self.dry_run {
+            println!("dry-run mode; skipping transcode operation");
+            return Ok(())
+        }
 
         if let Ok(mut child) = Command::new("ffmpeg")
             .args(args)
