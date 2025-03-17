@@ -2,6 +2,7 @@ pub mod compressor;
 pub mod error;
 pub mod fstools;
 pub mod ffmpeg;
+pub mod file_path_handler;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -11,8 +12,8 @@ use std::sync::mpsc;
 use std::thread;
 
 use ffmpeg::compressor::CompressorOptions;
+use file_path_handler::FilePathHandler;
 use rustop::opts;
-use fstools::{classify_file, DirEntryCategory};
 use compressor::Compressor;
 use signal_hook::{consts::{SIGINT, SIGHUP, SIGTERM}, iterator::Signals};
 
@@ -64,38 +65,11 @@ fn main() -> ExitCode {
         }
     });
 
-    // if outfile is None, use infile path with replaced extension
-    // if stdout is a tty, ask for an output filename with a suggested default
-    // if infile is a directory, operate on its contents
-    // if infile is a file, only operate on it
-    let exit_code = match classify_file(&PathBuf::from(&args.infile)) {
-        DirEntryCategory::Unknown => {
-            println!("Unable to classify {:?}.", args.infile);
-            ExitCode::FAILURE
-        },
-        DirEntryCategory::DoesNotExist => {
-            println!("{:?} does not exist.", args.infile);
-            ExitCode::FAILURE
-        },
-        DirEntryCategory::SymbolicLink => {
-            println!("{:?} is a symlink.", args.infile);
-            ExitCode::FAILURE
-        },
-        DirEntryCategory::Directory => {
-            println!("{:?} is a directory.", args.infile);
-            ExitCode::FAILURE
-        },
-        DirEntryCategory::RegularFile => match compressor.compress_file(&PathBuf::from(&args.infile), &PathBuf::from("")) {
-            Ok(_) => {
-                println!("Success! ^__^");
-                ExitCode::SUCCESS
-            },
-            Err(err) => {
-                println!("Failure -__-\n{}", err);
-                ExitCode::FAILURE
-            },
-        },
-    };
-
-    exit_code
+    let handler = FilePathHandler::for_pathbuf(
+        PathBuf::from(&args.infile),
+        &Rc::new(Box::new(compressor)));
+    match handler.handle() {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::FAILURE,
+    }
 }
