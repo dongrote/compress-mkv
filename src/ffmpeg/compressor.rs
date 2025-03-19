@@ -38,6 +38,7 @@ pub struct CompressorOptions {
     pub fast: bool,
     pub overwrite: bool,
     pub codec: String,
+    pub container: String,
 }
 
 pub struct FFmpegCompressor {
