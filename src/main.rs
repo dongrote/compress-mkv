@@ -24,6 +24,7 @@ fn main() -> ExitCode {
         opt dry_run:bool=false, desc:"Describe what would be done, but don't actually do anything.";
         opt recursive:bool=false, desc:"Recurse into subdirectories. (not implemented)";
         opt codec:String=String::from("av1"), desc:"Codec to use for compression. [av1, hevc]";
+        opt container:String=String::from("mkv"), desc:"Container";
         opt fast:bool=false, desc:"Use faster encoding parameters.";
         param infile:String, desc:"Input file/directory";
         param outfile:Option<String>, desc:"Output file (not implemented)";
@@ -44,6 +45,7 @@ fn main() -> ExitCode {
         fast: args.fast,
         overwrite: false,
         codec: args.codec.to_lowercase(),
+        container: args.container.to_lowercase(),
     }, Rc::clone(&rx));
 
     thread::spawn(move || {
