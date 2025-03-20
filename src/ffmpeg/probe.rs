@@ -14,6 +14,7 @@ pub struct AVProbeMetadata {
     pub height: u64,
     pub total_frames: usize,
     pub frame_rate: u64,
+    pub interlaced: bool,
 }
 
 impl AVProbeMetadata {
@@ -25,6 +26,7 @@ impl AVProbeMetadata {
             height: 0,
             total_frames: 0,
             frame_rate: 300,
+            interlaced: false,
         }
     }
 }
@@ -43,6 +45,7 @@ struct FFProbeJsonStream {
     pub pix_fmt: String,
     pub nb_read_packets: String,
     pub avg_frame_rate: String,
+    pub field_order: Option<String>,
 }
 
 pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> { 
@@ -61,6 +64,10 @@ pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
+        let field_order = match &deserialized.streams[0].field_order {
+            Some(s) => s,
+            None => "progressive",
+        };
         Ok(AVProbeMetadata {
             video_codec: deserialized.streams[0].codec_name.clone(),
             video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
@@ -68,6 +75,7 @@ pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> {
             height: deserialized.streams[0].height,
             total_frames: deserialized.streams[0].nb_read_packets.parse().unwrap_or(1),
             frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
+            interlaced: field_order != "progressive",
         })
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
@@ -112,6 +120,7 @@ mod tests {
             pix_fmt: String::new(),
             nb_read_packets: String::new(),
             avg_frame_rate: String::from(frame_rate),
+            field_order: None,
         }
     }
 }

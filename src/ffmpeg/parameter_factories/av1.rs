@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use crate::ffmpeg::compressor::CompressorOptions;
-use crate::ffmpeg::probe::probe_file;
+use crate::ffmpeg::probe::AVProbeMetadata;
 use super::ParameterFactory;
 
 pub struct Av1ParameterFactory {
@@ -18,22 +18,13 @@ impl Av1ParameterFactory {
 }
 
 impl ParameterFactory for Av1ParameterFactory {
-    fn parameters(&self, input: &PathBuf) -> Vec<PathBuf> {
-        let mut params = vec![
+    fn parameters(&self, _input: &PathBuf, probe: &AVProbeMetadata) -> Vec<PathBuf> {
+        vec![
             PathBuf::from("-c:v"), PathBuf::from("libsvtav1"),
             PathBuf::from("-crf"), PathBuf::from(self.crf.to_string()),
             PathBuf::from("-preset"), PathBuf::from(self.preset.to_string()),
             PathBuf::from("-svtav1-params"), PathBuf::from("tune=0"),
-        ];
-
-        match probe_file(input) {
-            Ok(probe) => {
-                params.push(PathBuf::from("-g"));
-                params.push(PathBuf::from(probe.frame_rate.to_string()));
-            },
-            Err(_) => (),
-        };
-
-        params
+            PathBuf::from("-g"), PathBuf::from(probe.frame_rate.to_string()),
+        ]
     }
 }

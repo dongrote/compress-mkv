@@ -135,3 +135,4 @@ COPY --from=build-ffmpeg /usr/lib/x86_64-linux-gnu/pulseaudio /usr/lib/x86_64-li
 COPY --from=build-ffmpeg /lib/x86_64-linux-gnu /lib/
 COPY --from=rust-build /app/target/release/compress-mkv /usr/bin/compress-mkv
 WORKDIR /work
+ENTRYPOINT ["compress-mkv"]
