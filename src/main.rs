@@ -26,6 +26,7 @@ fn main() -> ExitCode {
         opt codec:String=String::from("av1"), desc:"Codec to use for compression. [av1, hevc]";
         opt container:String=String::from("mkv"), desc:"Container";
         opt fast:bool=false, desc:"Use faster encoding parameters.";
+        opt extreme:bool=false, desc:"Compress with extreme high quality.";
         param infile:String, desc:"Input file/directory";
         param outfile:Option<String>, desc:"Output file (not implemented)";
     }.parse_or_exit();
@@ -43,6 +44,7 @@ fn main() -> ExitCode {
     let compressor = Compressor::new(CompressorOptions {
         dry_run: args.dry_run,
         fast: args.fast,
+        extreme: args.extreme,
         overwrite: false,
         codec: args.codec.to_lowercase(),
         container: args.container.to_lowercase(),

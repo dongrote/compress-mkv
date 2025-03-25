@@ -11,7 +11,19 @@ pub struct Av1ParameterFactory {
 impl Av1ParameterFactory {
     pub fn new(options: &CompressorOptions) -> Self {
         Av1ParameterFactory {
-            crf: if options.fast { 35 } else { 25 },
+            crf: if options.fast {
+                if options.extreme {
+                    25
+                } else {
+                    35
+                }
+            } else {
+                if options.extreme {
+                    18
+                } else {
+                    25
+                }
+            },
             preset: if options.fast { 12 } else { 2 },
         }
     }

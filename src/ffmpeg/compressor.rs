@@ -36,6 +36,7 @@ enum FFmpegStdoutResult {
 pub struct CompressorOptions {
     pub dry_run: bool,
     pub fast: bool,
+    pub extreme: bool,
     pub overwrite: bool,
     pub codec: String,
     pub container: String,
