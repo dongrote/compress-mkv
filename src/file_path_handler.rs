@@ -5,15 +5,22 @@ use crate::compressor::Compressor;
 use crate::fstools::{classify_file, DirEntryCategory};
 use crate::error::FilePathHandlerError;
 
+#[derive(Clone, Debug)]
+pub struct FilePathHandlerOptions {
+    pub recursive: bool,
+}
+
 pub struct FilePathHandler {
     path: PathBuf,
+    options: FilePathHandlerOptions,
     compressor: Rc<Box<Compressor>>,
 }
 
 impl FilePathHandler {
-    pub fn for_pathbuf(path: PathBuf, compressor: &Rc<Box<Compressor>>) -> Self {
+    pub fn for_pathbuf(path: PathBuf, options: FilePathHandlerOptions, compressor: &Rc<Box<Compressor>>) -> Self {
         FilePathHandler {
             path,
+            options,
             compressor: Rc::clone(compressor),
         }
     }
@@ -34,16 +41,20 @@ impl FilePathHandler {
             },
             DirEntryCategory::Directory => {
                 println!("{:?} is a directory.", self.path);
-                match read_dir(&self.path) {
-                    Ok(entries) => {
-                        for entry in entries.filter_map(|e| e.ok()) {
-                            if let Err(err) = FilePathHandler::for_pathbuf(entry.path(), &self.compressor).handle() {
-                                return Err(err);
+                if self.options.recursive {
+                    match read_dir(&self.path) {
+                        Ok(entries) => {
+                            for entry in entries.filter_map(|e| e.ok()) {
+                                if let Err(err) = FilePathHandler::for_pathbuf(entry.path(), self.options.clone(), &self.compressor).handle() {
+                                    return Err(err);
+                                }
                             }
-                        }
-                        Ok(())
-                    },
-                    Err(_) => Err(FilePathHandlerError::for_file_path(&self.path, "not implemented")),
+                            Ok(())
+                        },
+                        Err(_) => Err(FilePathHandlerError::for_file_path(&self.path, "not implemented")),
+                    }
+                } else {
+                    Ok(())
                 }
             },
             DirEntryCategory::RegularFile => self.compressor

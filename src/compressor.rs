@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::result::Result;
+use std::fs;
 use crate::ffmpeg::compressor::{CompressorOptions, FFmpegCompressor};
 use crate::error::{CompressorError, InputParseError};
 use crate::ffmpeg::parameter_factories::av1::Av1ParameterFactory;
@@ -24,10 +25,19 @@ impl Compressor {
 
     pub fn compress_file(&self, input: &PathBuf, _output: &PathBuf) -> Result<(), CompressorError> {
         if let Ok(parameters) = create_parameter_factory(input, &self.options) {
-            let compressor = FFmpegCompressor::new(&self.options, Rc::clone(&self.events));
+            let compressor = FFmpegCompressor::new(self.options.clone(), Rc::clone(&self.events));
             let output = self.generate_output_filename(&input);
-            compressor.compress(input, &output, &parameters)?;
-            Ok(())
+            match fs::exists(&output) {
+                Ok(exists) => {
+                    if exists {
+                        println!("{:?} already exists; skipping {:?}", output, input);
+                    } else {
+                        compressor.compress(input, &output, &parameters)?;
+                    }
+                    Ok(())
+                },
+                Err(err) => Err(CompressorError::for_file(&output, &format!("Error determining if {:?} exists.\n{:?}", output, err))),
+            }
         } else {
             Err(CompressorError::for_file(input, &format!("Unable to create {} compressor.", self.options.codec)))
         }

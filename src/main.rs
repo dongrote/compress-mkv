@@ -12,7 +12,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use ffmpeg::compressor::CompressorOptions;
-use file_path_handler::FilePathHandler;
+use file_path_handler::{FilePathHandler, FilePathHandlerOptions};
 use rustop::opts;
 use compressor::Compressor;
 use signal_hook::{consts::{SIGINT, SIGHUP, SIGTERM}, iterator::Signals};
@@ -20,15 +20,15 @@ use signal_hook::{consts::{SIGINT, SIGHUP, SIGTERM}, iterator::Signals};
 fn main() -> ExitCode {
     let (args, _rest) = opts! {
         synopsis "Compress mkv files for use by Jellyfin/Emby/etc";
+        version env!("CARGO_PKG_VERSION");
         opt sample:bool=false, desc:"Transcode a small sample. (not implemented)";
         opt dry_run:bool=false, desc:"Describe what would be done, but don't actually do anything.";
-        opt recursive:bool=false, desc:"Recurse into subdirectories. (not implemented)";
+        opt recursive:bool=true, desc:"Do not recurse into subdirectories.";
         opt codec:String=String::from("av1"), desc:"Codec to use for compression. [av1, hevc]";
         opt container:String=String::from("mkv"), desc:"Container";
         opt fast:bool=false, desc:"Use faster encoding parameters.";
         opt extreme:bool=false, desc:"Compress with extreme high quality.";
-        param infile:String, desc:"Input file/directory";
-        param outfile:Option<String>, desc:"Output file (not implemented)";
+        param infiles:Vec<String>, desc:"Input files/directories";
     }.parse_or_exit();
 
     let f = ffmpeg::FFmpeg::new(); 
@@ -69,11 +69,17 @@ fn main() -> ExitCode {
         }
     });
 
-    let handler = FilePathHandler::for_pathbuf(
-        PathBuf::from(&args.infile),
-        &Rc::new(Box::new(compressor)));
-    match handler.handle() {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
+    let mut exit_code = ExitCode::SUCCESS;
+    let rc_compressor = Rc::new(Box::new(compressor));
+    for infile in args.infiles {
+        let handler = FilePathHandler::for_pathbuf(
+            PathBuf::from(&infile),
+            FilePathHandlerOptions { recursive: args.recursive, },
+            &Rc::clone(&rc_compressor));
+        if handler.handle().is_err() {
+            exit_code = ExitCode::FAILURE;
+        }
     }
+
+    exit_code
 }

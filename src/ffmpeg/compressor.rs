@@ -32,7 +32,7 @@ enum FFmpegStdoutResult {
     Render,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CompressorOptions {
     pub dry_run: bool,
     pub fast: bool,
@@ -44,20 +44,24 @@ pub struct CompressorOptions {
 
 pub struct FFmpegCompressor {
     events: Rc<RefCell<mpsc::Receiver<bool>>>,
-    dry_run: bool,
+    options: CompressorOptions,
 }
 
 impl FFmpegCompressor {
-    pub fn new(options: &CompressorOptions, events: Rc<RefCell<mpsc::Receiver<bool>>>) -> Self {
+    pub fn new(options: CompressorOptions, events: Rc<RefCell<mpsc::Receiver<bool>>>) -> Self {
         FFmpegCompressor {
             events,
-            dry_run: options.dry_run,
+            options,
         }
     }
 
     pub fn compress(&self, input: &PathBuf, output: &PathBuf, parameters: &Box<dyn ParameterFactory>) -> Result<(), CompressorError> {
         match probe_file(input) {
             Ok(probe) => {
+                if probe.video_codec == self.options.codec {
+                    println!("{:?} is already encoded with {}; skipping", input, self.options.codec);
+                    return Ok(())
+                }
                 let total_frames = probe.total_frames;
                 let input_size = get_file_size(input);
                 let mut args = vec![
@@ -83,7 +87,7 @@ impl FFmpegCompressor {
                 args.insert(0, PathBuf::from("-loglevel"));
                 args.insert(0, PathBuf::from("-nostats"));
                 args.insert(0, PathBuf::from("-hide_banner"));
-                if !self.dry_run {
+                if !self.options.dry_run {
                     if let Ok(mut child) = Command::new("ffmpeg")
                         .args(args)
                         .stdout(Stdio::piped())
