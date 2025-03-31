@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::{io::{BufRead, BufReader}, path::PathBuf, process::{Child, Command, Stdio}};
+use std::{io::{BufRead, BufReader, Read}, path::PathBuf, process::{Child, ChildStderr, Command, Stdio}};
 use std::fs;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -91,6 +91,7 @@ impl FFmpegCompressor {
                     if let Ok(mut child) = Command::new("ffmpeg")
                         .args(args)
                         .stdout(Stdio::piped())
+                        .stderr(Stdio::piped())
                         .spawn() {
 
                         term::init(false);
@@ -125,6 +126,9 @@ impl FFmpegCompressor {
                             match status.success() {
                                 true => Ok(()),
                                 false => {
+                                    if let Some(stderr) = read_stderr_to_end(&mut child.stderr.take()) {
+                                        print!("{}", stderr);
+                                    }
                                     if let Some(code) = status.code() {
                                         Err(CompressorError::for_file(input, &format!("ffmpeg exited with {:}", code)))
                                     } else {
@@ -187,6 +191,20 @@ impl FFmpegCompressor {
                 }
             }
         }
+    }
+}
+
+fn read_stderr_to_end(stderr: &mut Option<ChildStderr>) -> Option<String> {
+    let mut buf = Vec::new();
+    match stderr {
+        Some(stream) => match BufReader::new(stream).read_to_end(&mut buf) {
+            Ok(_) => match String::from_utf8(buf) {
+                Ok(s) => Some(s),
+                Err(_) => None,
+            },
+            Err(_) => None,
+        },
+        None => None,
     }
 }
 
