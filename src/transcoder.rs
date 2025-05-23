@@ -131,6 +131,9 @@ impl Transcoder {
             pbs("-progress"), pbs("pipe:1"),
             pbs("-i"), source.clone()
         ];
+
+        // if the video is interlaced, we want to use bwdif to deinterlace it
+
         let mut quality_args: Vec<PathBuf> = Quality::parameters(self.codec.clone(), self.quality)
             .iter().map(|s| pbs(s)).collect();
         let mut container_args: Vec<PathBuf> = Container::parameters(self.container)

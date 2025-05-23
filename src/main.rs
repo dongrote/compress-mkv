@@ -1,5 +1,6 @@
 pub mod app;
 pub mod codecs;
+pub mod components;
 pub mod containers;
 pub mod error;
 pub mod filelist;

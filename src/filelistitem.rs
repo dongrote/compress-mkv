@@ -79,15 +79,7 @@ impl FileListItem {
 
 impl Display for FileListItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let status_glyph = match self.status {
-            FileListItemStatus::Unknown => "🤷",
-            FileListItemStatus::Invalid => "🚫",
-            FileListItemStatus::Candidate => "👍",
-            FileListItemStatus::Enqueued => "→",
-            FileListItemStatus::Transcoding => "🚧",
-            FileListItemStatus::Transcoded => "✅",
-            FileListItemStatus::Analyzing => "🔎",
-        };
+        let status_glyph = format!("{}", self.status);
 
         let resolution_str = match &self.resolution {
             None => "----x----",
@@ -112,5 +104,20 @@ impl Display for FileListItem {
             codec_str,
             size_str,
             self.path.display())
+    }
+}
+
+impl Display for FileListItemStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let status_str = match self {
+            FileListItemStatus::Unknown => "🤷",
+            FileListItemStatus::Invalid => "🚫",
+            FileListItemStatus::Candidate => "☐",
+            FileListItemStatus::Enqueued => "☑",
+            FileListItemStatus::Transcoding => "🚧",
+            FileListItemStatus::Transcoded => "✅",
+            FileListItemStatus::Analyzing => "🔎",
+        };
+        write!(f, "{}", status_str)
     }
 }

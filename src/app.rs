@@ -3,11 +3,11 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout, Rect},
     style::{
-        palette::tailwind::{BLUE, GREEN, PURPLE, RED, SLATE, YELLOW}, Color, Modifier, Style, Stylize
+        palette::tailwind::{BLUE, GREEN, PURPLE, RED, SLATE, YELLOW}, Color, Style, Stylize
     },
     symbols, 
     text::{Line, Text}, 
-    widgets::{Block, Borders, HighlightSpacing, LineGauge, List, ListItem, ListState, Padding, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, Borders, LineGauge, List, ListItem, Padding, Paragraph, StatefulWidget, TableState, Widget},
     DefaultTerminal
 };
 use std::{path::PathBuf, sync::mpsc, thread::JoinHandle, time::Duration};
@@ -17,12 +17,20 @@ use std::thread;
 use humanize_bytes::humanize_bytes_decimal;
 
 use crate::{
-    codecs::Codec, containers::Container, filelist::FileList, filelistitem::{FileListItem, FileListItemStatus}, filescanner::FileScanner, quality::Quality, queue_processor::{QueueProcessor, QueueProcessorMessage}, transcode_state::{TranscodeState, TranscodeStatus}, transcode_task::TranscodeTask
+    codecs::Codec,
+    containers::Container,
+    filelist::FileList,
+    filelistitem::{FileListItem, FileListItemStatus},
+    filescanner::FileScanner,
+    quality::Quality,
+    queue_processor::{QueueProcessor, QueueProcessorMessage},
+    transcode_state::{TranscodeState, TranscodeStatus},
+    transcode_task::TranscodeTask,
+    components::FileList as FileListWidget,
 };
 
 const HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
 const ROW_BG_COLOR: Color = SLATE.c950;
-const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
 const TEXT_FG_COLOR: Color = SLATE.c200;
 const FILELISTITEM_UNKNOWN_FG_COLOR: Color = SLATE.c50;
 const FILELISTITEM_INVALID_FG_COLOR: Color = RED.c800;
@@ -39,27 +47,49 @@ pub struct App {
     file_list: Arc<Mutex<FileList>>,
     queue: Arc<Mutex<VecDeque<TranscodeTask>>>,
     transcode_state: Arc<Mutex<TranscodeState>>,
-    files_state: ListState,
+    files_state: TableState,
     queue_processor_thread: Option<JoinHandle<()>>,
+    quality: Quality,
 }
 
 impl Default for App {
     fn default() -> Self {
-        App::new(PathBuf::from("."))
+        App::excellent(PathBuf::from("."))
     }
 }
 
 impl App {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn insane(path: PathBuf) -> Self {
+        App::new(path, Quality::Insane)
+    }
+
+    pub fn excellent(path: PathBuf) -> Self {
+        App::new(path, Quality::Excellent)
+    }
+
+    pub fn great(path: PathBuf) -> Self {
+        App::new(path, Quality::Great)
+    }
+
+    pub fn good(path: PathBuf) -> Self {
+        App::new(path, Quality::Good)
+    }
+
+    pub fn fast(path: PathBuf) -> Self {
+        App::new(path, Quality::Fast)
+    }
+
+    pub fn new(path: PathBuf, quality: Quality) -> Self {
         let queue = Arc::new(Mutex::new(VecDeque::new()));
         let stop = Arc::new(Mutex::new(false));
         App {
             queue,
             stop,
+            quality,
             base_path: path,
             file_list: Arc::new(Mutex::new(FileList::new())),
             transcode_state: Arc::new(Mutex::new(TranscodeState::new())),
-            files_state: ListState::default(),
+            files_state: TableState::default().with_selected(0),
             queue_processor_thread: None,
         }
     }
@@ -248,7 +278,7 @@ impl App {
                         // transcoded
                         let codec = Codec::AV1;
                         let container = Container::Matroska;
-                        let quality = Quality::Excellent;
+                        let quality = self.quality.clone();
                         let (metadata, source) = {
                             let i = item.lock().unwrap();
                             (i.avmetadata.clone(), i.path.clone())
@@ -326,35 +356,12 @@ impl App {
     }
 
     fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
-        let title = match std::path::absolute(&self.base_path) {
-            Err(_) => String::from("Files"),
-            Ok(absolute_path) => format!("Files ({})", absolute_path.display()),
-        };
-        let block = Block::new()
-            .title(Line::raw(title).centered())
-            .borders(Borders::TOP)
-            .border_set(symbols::border::EMPTY)
-            .border_style(HEADER_STYLE)
-            .bg(ROW_BG_COLOR);
-
-        let items: Vec<ListItem> = {
-            let f = {
-                let fl = self.file_list.lock().unwrap();
-                fl.snapshot()
-            };
-            f.iter()
-                .enumerate()
-                .map(|(_i, file)| ListItem::from(file).bg(SLATE.c950))
-                .collect()
+        let items = {
+            let fl = self.file_list.lock().unwrap();
+            fl.snapshot()
         };
 
-        let list = List::new(items)
-            .block(block)
-            .highlight_style(SELECTED_STYLE)
-            .highlight_symbol(">")
-            .highlight_spacing(HighlightSpacing::WhenSelected);
-
-        StatefulWidget::render(list, area, buf, &mut self.files_state)
+        StatefulWidget::render(FileListWidget::new(items).widget(), area, buf, &mut self.files_state)
     }
 
     fn render_queue(&mut self, area: Rect, buf: &mut Buffer) {
