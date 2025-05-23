@@ -104,10 +104,10 @@ impl FileList {
                 None => "??? B",
             };
             Row::new([
-                    Cell::from(Text::from(format!("{}", item.status))),
+                    Cell::from(Text::from(format!("{}", item.status)).centered()),
                     Cell::from(Text::from(format!("{}", resolution))),
                     Cell::from(Text::from(format!("{}", codec))),
-                    Cell::from(Text::from(format!("{}", size_str))),
+                    Cell::from(Text::from(format!("{}", size_str)).right_aligned()),
                     Cell::from(Text::from(format!("{}", &item.path.display()))),
                 ])
                 .style(style)

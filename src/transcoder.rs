@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, mpsc::Sender};
 use crate::codecs::Codec;
 use crate::containers::Container;
 use crate::quality::Quality;
-use crate::probe::{probe_file, AVProbeMetadata};
+use crate::probe::{probe_file, probe_interlaced, AVProbeMetadata};
 use crate::transcode_state::TranscodeStatus;
 
 #[derive(Debug)]
@@ -133,6 +133,12 @@ impl Transcoder {
         ];
 
         // if the video is interlaced, we want to use bwdif to deinterlace it
+        if let Ok(interlaced) = probe_interlaced(&source) {
+            if interlaced {
+                args.push(pbs("-vf"));
+                args.push(pbs("bwdif"));
+            }
+        }
 
         let mut quality_args: Vec<PathBuf> = Quality::parameters(self.codec.clone(), self.quality)
             .iter().map(|s| pbs(s)).collect();

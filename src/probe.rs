@@ -55,12 +55,12 @@ struct FFProbeJsonOutput {
 struct FFProbeJsonStream {
     pub codec_name: String,
     pub codec_tag_string: Option<String>,
+    pub field_order: Option<String>,
     pub width: u64,
     pub height: u64,
     pub pix_fmt: String,
     pub nb_read_packets: Option<String>,
     pub avg_frame_rate: String,
-    pub field_order: Option<String>,
 }
 
 pub fn probe_codec(path: &PathBuf) -> Result<Codec, Box<dyn Error>> {
@@ -98,6 +98,29 @@ pub fn probe_codec_tag(path: &PathBuf) -> Result<Option<String>, Box<dyn Error>>
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
         Ok(deserialized.streams[0].codec_tag_string.clone())
+    } else {
+        Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
+    }
+}
+
+pub fn probe_interlaced(path: &PathBuf) -> Result<bool, Box<dyn Error>> {
+    let output = Command::new("ffprobe")
+        .args([
+            &PathBuf::from("-of"),
+            &PathBuf::from("json"),
+            &PathBuf::from("-show_streams"),
+            &PathBuf::from("-select_streams"),
+            &PathBuf::from("v:0"),
+            path,
+        ])
+        .output()?;
+    if output.status.success() {
+        let utf8 = String::from_utf8(output.stdout)?;
+        let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
+        Ok(match &deserialized.streams[0].field_order {
+            Some(s) => s != "progressive",
+            None => true,
+        })
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }

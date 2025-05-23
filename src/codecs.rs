@@ -6,6 +6,7 @@ pub enum Codec {
     AV1,
     HEVC,
     H264,
+    MPEG2,
 }
 
 impl Codec {
@@ -14,6 +15,7 @@ impl Codec {
             "av1" => Codec::AV1,
             "hevc" => Codec::HEVC,
             "h264" => Codec::H264,
+            "mpeg2video" => Codec::MPEG2,
             _ => Codec::Unknown(String::from(s)),
         }
     }
@@ -24,6 +26,7 @@ impl Codec {
             Codec::AV1 => Some(String::from("libsvtav1")),
             Codec::HEVC => Some(String::from("libx265")),
             Codec::H264 => Some(String::from("libx264")),
+            Codec::MPEG2 => Some(String::from("mpeg2video")),
         }
     }
 }
@@ -52,5 +55,6 @@ mod tests {
         assert_eq!(format!("{}", Codec::AV1), "av1");
         assert_eq!(format!("{}", Codec::HEVC), "hevc");
         assert_eq!(format!("{}", Codec::H264), "h264");
+        assert_eq!(format!("{}", Codec::MPEG2), "mpeg2");
     }
 }

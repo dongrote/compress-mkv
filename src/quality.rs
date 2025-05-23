@@ -14,6 +14,7 @@ impl Quality {
     pub fn parameters(codec: Codec, quality: Quality) -> Vec<String> {
         match codec {
             Codec::Unknown(_) => vec![],
+            Codec::MPEG2 => vec![],
             Codec::AV1 => av1_parameters(quality),
             Codec::HEVC => hevc_parameters(quality),
             Codec::H264 => h264_parameters(quality),
