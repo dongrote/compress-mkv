@@ -167,7 +167,9 @@ impl Transcoder {
 
     fn consume_stdout(&self, stdout: ChildStdout, probe: AVProbeMetadata, progress_tx: Option<Sender<TranscodeProgressMessage>>) -> bool {
         let mut progress = CompressionProgress::new();
-        let total_frames = probe.total_frames;
+        // when the source video is interlaced, we need to double the `probe.total_frames` since the bwdif video
+        // filter will be create two destination frames for every source frame
+        let total_frames = if probe.interlaced { probe.total_frames << 1 } else { probe.total_frames };
         let stdout_reader = BufReader::new(stdout);
         for line in stdout_reader.lines() {
             if let Ok(l) = line {

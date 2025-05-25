@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use uuid::Uuid;
+
 use crate::transcode_task::TranscodeTask;
 use crate::transcoder::Transcoder;
 
@@ -14,6 +16,7 @@ pub enum QueueStatus {
 
 #[derive(Clone, Debug)]
 pub struct TranscodingMessage {
+    pub id: Uuid,
     pub frames: usize,
     pub total_frames: usize,
     pub progress: f64,
@@ -117,6 +120,7 @@ impl QueueProcessor {
         for msg in rx {
             compressed_size = msg.predicted_compressed_size;
             self.publish(QueueProcessorMessage::Transcoding(TranscodingMessage {
+                id: transcode_task.id,
                 frames: msg.frames,
                 total_frames: msg.total_frames,
                 progress: msg.progress,

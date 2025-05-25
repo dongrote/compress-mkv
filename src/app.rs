@@ -1,13 +1,13 @@
+use uuid::Uuid;
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout, Rect},
     style::{
-        palette::tailwind::{BLUE, GREEN, PURPLE, RED, SLATE, YELLOW}, Color, Style, Stylize
+        palette::tailwind::{GREEN, PURPLE, RED, SLATE, YELLOW}, Color, Style, Stylize
     },
-    symbols, 
     text::{Line, Text}, 
-    widgets::{Block, Borders, LineGauge, List, ListItem, Padding, Paragraph, StatefulWidget, TableState, Widget},
+    widgets::{Block, LineGauge, ListItem, Paragraph, StatefulWidget, TableState, Widget},
     DefaultTerminal
 };
 use std::{path::PathBuf, sync::mpsc, thread::JoinHandle, time::Duration};
@@ -17,21 +17,9 @@ use std::thread;
 use humanize_bytes::humanize_bytes_decimal;
 
 use crate::{
-    codecs::Codec,
-    containers::Container,
-    filelist::FileList,
-    filelistitem::{FileListItem, FileListItemStatus},
-    filescanner::FileScanner,
-    quality::Quality,
-    queue_processor::{QueueProcessor, QueueProcessorMessage},
-    transcode_state::{TranscodeState, TranscodeStatus},
-    transcode_task::TranscodeTask,
-    components::FileList as FileListWidget,
+    codecs::Codec, components::{FileList as FileListWidget, TranscodesList}, containers::Container, filelist::FileList, filelistitem::{FileListItem, FileListItemStatus}, filescanner::FileScanner, quality::Quality, queue_processor::{QueueProcessor, QueueProcessorMessage}, transcode_state::{TranscodeState, TranscodeStatus}, transcode_task::TranscodeTask
 };
 
-const HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
-const ROW_BG_COLOR: Color = SLATE.c950;
-const TEXT_FG_COLOR: Color = SLATE.c200;
 const FILELISTITEM_UNKNOWN_FG_COLOR: Color = SLATE.c50;
 const FILELISTITEM_INVALID_FG_COLOR: Color = RED.c800;
 const FILELISTITEM_CANDIDATE_FG_COLOR: Color = SLATE.c200;
@@ -40,11 +28,11 @@ const FILELISTITEM_TRANSCODING_FG_COLOR: Color = YELLOW.c500;
 const FILELISTITEM_TRANSCODED_FG_COLOR: Color = GREEN.c500;
 const FILELISTITEM_ANALYZING_FG_COLOR: Color = PURPLE.c300;
 
-
 pub struct App {
     base_path: PathBuf,
     stop: Arc<Mutex<bool>>,
     file_list: Arc<Mutex<FileList>>,
+    task_states: Arc<Mutex<Vec<TranscodeState>>>,
     queue: Arc<Mutex<VecDeque<TranscodeTask>>>,
     transcode_state: Arc<Mutex<TranscodeState>>,
     files_state: TableState,
@@ -86,6 +74,7 @@ impl App {
             queue,
             stop,
             quality,
+            task_states: Arc::new(Mutex::new(vec![])),
             base_path: path,
             file_list: Arc::new(Mutex::new(FileList::new())),
             transcode_state: Arc::new(Mutex::new(TranscodeState::new())),
@@ -130,6 +119,7 @@ impl App {
 
     fn queue_processor(&mut self) {
         let file_list = Arc::clone(&self.file_list);
+        let task_states = Arc::clone(&self.task_states);
         let queue = Arc::clone(&self.queue);
         let stop = Arc::clone(&self.stop);
         let xcode_state = Arc::clone(&self.transcode_state);
@@ -152,6 +142,15 @@ impl App {
                             state.source_size = task.metadata.file_size;
                         }
                         {
+                            let mut ts = task_states.lock().unwrap();
+                            for i in ts.iter_mut() {
+                                if i.id == task.id {
+                                    i.status = TranscodeStatus::Transcoding;
+                                    break;
+                                } 
+                            }
+                        }
+                        {
                             let fl = file_list.lock().unwrap();
                             let opt = fl.items.iter().find(|i| i.lock().unwrap().path == task.source);
                             if let Some(item) = opt {
@@ -167,6 +166,19 @@ impl App {
                         state.predicted_transcoded_size = Some(xmsg.predicted_size);
                         state.frames = Some(xmsg.frames);
                         state.total_frames = Some(xmsg.total_frames);
+                        {
+                            let mut ts = task_states.lock().unwrap();
+                            for i in ts.iter_mut() {
+                                if i.id == xmsg.id {
+                                    i.progress = Some(xmsg.progress);
+                                    i.current_transcoding_size = Some(xmsg.current_size);
+                                    i.predicted_transcoded_size = Some(xmsg.predicted_size);
+                                    i.frames = Some(xmsg.frames);
+                                    i.total_frames = Some(xmsg.total_frames);
+                                    break;
+                                } 
+                            }
+                        }
                     },
                     QueueProcessorMessage::TranscodeEnd(task, _final_size) => {
                         {
@@ -186,6 +198,16 @@ impl App {
                             if let Some(item) = opt {
                                 let mut i = item.lock().unwrap();
                                 i.status = FileListItemStatus::Transcoded;
+                            }
+                        }
+                        {
+                            let mut ts = task_states.lock().unwrap();
+                            for i in ts.iter_mut() {
+                                if i.id == task.id {
+                                    i.progress = Some(1.0);
+                                    i.status = TranscodeStatus::Complete;
+                                    break;
+                                } 
                             }
                         }
                     },
@@ -252,12 +274,14 @@ impl App {
                     FileListItemStatus::Enqueued => {
                         // user wants to remove this FileListItem from the
                         // processing queue
+                        let mut task_id: Option<Uuid> = None;
                         {
                             let mut q = self.queue.lock().unwrap();
                             let index = {
                                 let mut index = 0;
                                 for i in &*q {
                                     if *i.source == path {
+                                        task_id = Some(i.id);
                                         break;
                                     }
                                     index = index + 1;
@@ -266,6 +290,27 @@ impl App {
                             };
                             q.remove(index);
                         }
+
+                        if let Some(id) = task_id {
+                            let mut ts = self.task_states.lock().unwrap();
+                            let mut found = false;
+                            let index = {
+                                let mut index = 0;
+                                for i in &*ts {
+                                    if i.id == id {
+                                        found = true;
+                                        break;
+                                    }
+                                    index = index + 1;
+                                }
+
+                                index
+                            };
+
+                            if found {
+                                ts.remove(index);
+                            }
+                        }
                         {
                             let mut i = item.lock().unwrap();
                             i.set_candidate();
@@ -273,7 +318,7 @@ impl App {
                     },
                     FileListItemStatus::Candidate => {
                         // only permit enqueueing if this is a Candidate,
-                        // Candidate means it can be transocded,
+                        // Candidate means it can be transcoded,
                         // it is not already enqueued, and it is not being
                         // transcoded
                         let codec = Codec::AV1;
@@ -285,7 +330,14 @@ impl App {
                         };
                         let mut destination = source.clone();
                         destination.set_extension(format!("{}.{}", &codec, Container::extension(container)));
+                        let mut state = TranscodeState::new();
+                        state.path = Some(source.clone());
+                        state.source_size = metadata.file_size;
+                        state.source_codec = Some(metadata.video_codec.clone());
+                        state.transcode_codec = Some(codec.clone());
+                        state.total_frames = Some(metadata.total_frames);
                         let task = TranscodeTask {
+                            id: state.id,
                             source,
                             destination,
                             metadata,
@@ -293,6 +345,10 @@ impl App {
                             container,
                             quality,
                         };
+                        {
+                            let mut ts = self.task_states.lock().unwrap();
+                            ts.push(state);
+                        }
                         {
                             let mut q = self.queue.lock().unwrap();
                             q.push_back(task);
@@ -365,65 +421,21 @@ impl App {
     }
 
     fn render_queue(&mut self, area: Rect, buf: &mut Buffer) {
-        let queue_snapshot: Vec<TranscodeTask> = {
-            let q = self.queue.lock().unwrap();
-            q.iter().map(|i| i.clone()).collect()
+        // instead of rendering the queue, let's render transcodes, that way we have history, progress, and outcome
+        let task_states_snapshot: Vec<TranscodeState> = {
+            let ts = self.task_states.lock().unwrap();
+            ts.iter().map(|i| i.clone()).collect()
         };
-        let items: Vec<ListItem> = queue_snapshot
-            .iter()
-            .map(|t| ListItem::from(t.source.to_string_lossy()).fg(SLATE.c300))
-            .collect();
 
-        let block = Block::new()
-            .title(Line::raw("Queue").centered())
-            .borders(Borders::TOP)
-            .border_set(symbols::border::EMPTY)
-            .border_style(HEADER_STYLE)
-            .bg(ROW_BG_COLOR)
-            .padding(Padding::horizontal(1));
-
-        let list = List::new(items)
-            .block(block)
-            .fg(TEXT_FG_COLOR);
-
-        Widget::render(list, area, buf);
+        Widget::render(TranscodesList::new(task_states_snapshot).widget(), area, buf)
     }
-
-    //fn render_logs(&mut self, area: Rect, buf: &mut Buffer) {
-    //    let mut logs = vec![];
-    //    {
-    //        let start = area.height as usize;
-    //        let l = self.logs.lock().unwrap();
-    //        for log in if l.len() > (start<<1) { &l[start..] } else { &l[..] } {
-    //            logs.push(log.clone());
-    //        }
-    //    };
-    //
-    //    logs.reverse();
-    //    let items: Vec<ListItem> = logs
-    //        .into_iter()
-    //        .map(|l| ListItem::from(l).fg(SLATE.c300))
-    //        .collect();
-    //
-    //    let block = Block::new()
-    //        .title(Line::raw("Logs").centered())
-    //        .borders(Borders::TOP)
-    //        .border_set(symbols::border::EMPTY)
-    //        .border_style(HEADER_STYLE)
-    //        .bg(ROW_BG_COLOR)
-    //        .padding(Padding::horizontal(1));
-    //
-    //    let list = List::new(items)
-    //        .block(block)
-    //        .fg(TEXT_FG_COLOR);
-    //
-    //    Widget::render(list, area, buf);
-    //}
 
     fn render_transcoding_status(&mut self, area: Rect, buf: &mut Buffer) {
         let label = {
             let x = self.transcode_state.lock().unwrap();
             match (*x).status {
+                TranscodeStatus::Complete => String::from("Complete"),
+                TranscodeStatus::Error => String::from("Error"),
                 TranscodeStatus::Idle => String::from("Idle"),
                 TranscodeStatus::Transcoding => match &(*x).path {
                     None => String::from("undefined"),
