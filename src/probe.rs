@@ -118,7 +118,7 @@ pub fn probe_interlaced(path: &PathBuf) -> Result<bool, Box<dyn Error>> {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
         Ok(match &deserialized.streams[0].field_order {
-            Some(s) => s != "progressive",
+            Some(s) => s == "tt" || s == "bb" || s == "tb" || s == "bt",
             None => true,
         })
     } else {
@@ -180,7 +180,7 @@ pub fn probe_file_fast(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>
             },
             total_frames: 0,
             frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
-            interlaced: field_order != "progressive",
+            interlaced: field_order == "tt" || field_order == "bb" || field_order == "tb" || field_order == "bt",
         })
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
@@ -222,7 +222,7 @@ pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> {
                 Some(tf) => tf.parse().unwrap_or(1),
             },
             frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
-            interlaced: field_order != "progressive",
+            interlaced: field_order == "tt" || field_order == "bb" || field_order == "tb" || field_order == "bt",
         })
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
