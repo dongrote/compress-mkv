@@ -117,10 +117,7 @@ pub fn probe_interlaced(path: &PathBuf) -> Result<bool, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(match &deserialized.streams[0].field_order {
-            Some(s) => s == "tt" || s == "bb" || s == "tb" || s == "bt",
-            None => true,
-        })
+        Ok(is_interlaced(&deserialized.streams[0]))
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
@@ -163,10 +160,6 @@ pub fn probe_file_fast(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        let field_order = match &deserialized.streams[0].field_order {
-            Some(s) => s,
-            None => "progressive",
-        };
         Ok(AVProbeMetadata {
             video_codec: Codec::from_str(deserialized.streams[0].codec_name.as_str()),
             video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
@@ -180,7 +173,7 @@ pub fn probe_file_fast(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>
             },
             total_frames: 0,
             frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
-            interlaced: field_order == "tt" || field_order == "bb" || field_order == "tb" || field_order == "bt",
+            interlaced: is_interlaced(&deserialized.streams[0]),
         })
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
@@ -202,10 +195,6 @@ pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        let field_order = match &deserialized.streams[0].field_order {
-            Some(s) => s,
-            None => "progressive",
-        };
         Ok(AVProbeMetadata {
             video_codec: Codec::from_str(deserialized.streams[0].codec_name.as_str()),
             video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
@@ -222,7 +211,7 @@ pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> {
                 Some(tf) => tf.parse().unwrap_or(1),
             },
             frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
-            interlaced: field_order == "tt" || field_order == "bb" || field_order == "tb" || field_order == "bt",
+            interlaced: is_interlaced(&deserialized.streams[0]),
         })
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
@@ -247,6 +236,14 @@ fn get_frame_rate(path: &PathBuf, stream: &FFProbeJsonStream) -> Result<u64, Inp
     }
 }
 
+fn is_interlaced(stream: &FFProbeJsonStream) -> bool {
+    match &stream.field_order {
+        None => false,
+        Some(s) => s == "tt" || s == "bb" || s == "bt" || s == "tb",
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,6 +253,18 @@ mod tests {
         assert_eq!(get_frame_rate(&PathBuf::from(""), &ffprobe_json_stream_from_frame_rate("25/1")).unwrap(), 25);
         assert_eq!(get_frame_rate(&PathBuf::from(""), &ffprobe_json_stream_from_frame_rate("24000/1001")).unwrap(), 24);
         assert_eq!(get_frame_rate(&PathBuf::from(""), &ffprobe_json_stream_from_frame_rate("60/1")).unwrap(), 60);
+    }
+
+    #[test]
+    fn test_is_interlaced() {
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(None)), false);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("progressive"))), false);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("unknown"))), false);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("Unknown"))), false);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("tt"))), true);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("bb"))), true);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("bt"))), true);
+        assert_eq!(is_interlaced(&ffprobe_json_stream_from_field_order(Some("tb"))), true);
     }
 
     fn ffprobe_json_stream_from_frame_rate(frame_rate: &str) -> FFProbeJsonStream {
@@ -268,6 +277,19 @@ mod tests {
             nb_read_packets: None,
             avg_frame_rate: String::from(frame_rate),
             field_order: None,
+        }
+    }
+
+    fn ffprobe_json_stream_from_field_order(field_order: Option<&str>) -> FFProbeJsonStream {
+        FFProbeJsonStream {
+            field_order: match field_order { None => None, Some(s) => Some(String::from(s)), },
+            codec_name: String::new(),
+            codec_tag_string: None,
+            width: 0,
+            height: 0,
+            pix_fmt: String::new(),
+            nb_read_packets: None,
+            avg_frame_rate: String::from(""),
         }
     }
 }

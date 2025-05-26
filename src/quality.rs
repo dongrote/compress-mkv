@@ -28,26 +28,31 @@ fn av1_parameters(quality: Quality) -> Vec<String> {
             String::from("-c:v"), String::from("libsvtav1"),
             String::from("-crf"), String::from("8"),
             String::from("-preset"), String::from("2"),
+            String::from("-pix_fmt"), String::from("yuv420p10le")
         ],
         Quality::Excellent => vec![
             String::from("-c:v"), String::from("libsvtav1"),
             String::from("-crf"), String::from("18"),
             String::from("-preset"), String::from("2"),
+            String::from("-pix_fmt"), String::from("yuv420p10le")
         ],
         Quality::Great => vec![
             String::from("-c:v"), String::from("libsvtav1"),
             String::from("-crf"), String::from("22"),
             String::from("-preset"), String::from("3"),
+            String::from("-pix_fmt"), String::from("yuv420p10le")
         ],
         Quality::Good => vec![
             String::from("-c:v"), String::from("libsvtav1"),
             String::from("-crf"), String::from("25"),
             String::from("-preset"), String::from("8"),
+            String::from("-pix_fmt"), String::from("yuv420p10le")
         ],
         Quality::Fast => vec![
             String::from("-c:v"), String::from("libsvtav1"),
             String::from("-crf"), String::from("25"),
             String::from("-preset"), String::from("12"),
+            String::from("-pix_fmt"), String::from("yuv420p10le")
         ],
     }
 }
