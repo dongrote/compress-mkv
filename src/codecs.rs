@@ -7,6 +7,7 @@ pub enum Codec {
     HEVC,
     H264,
     MPEG2,
+    ProRes,
 }
 
 impl Codec {
@@ -16,6 +17,7 @@ impl Codec {
             "hevc" => Codec::HEVC,
             "h264" => Codec::H264,
             "mpeg2video" => Codec::MPEG2,
+            "prores" => Codec::ProRes,
             _ => Codec::Unknown(String::from(s)),
         }
     }
@@ -23,6 +25,7 @@ impl Codec {
     pub fn cv_parameter(codec: Codec) -> Option<String> {
         match codec {
             Codec::Unknown(_) => None,
+            Codec::ProRes => None,
             Codec::AV1 => Some(String::from("libsvtav1")),
             Codec::HEVC => Some(String::from("libx265")),
             Codec::H264 => Some(String::from("libx264")),
@@ -56,5 +59,6 @@ mod tests {
         assert_eq!(format!("{}", Codec::HEVC), "hevc");
         assert_eq!(format!("{}", Codec::H264), "h264");
         assert_eq!(format!("{}", Codec::MPEG2), "mpeg2");
+        assert_eq!(format!("{}", Codec::ProRes), "prores");
     }
 }

@@ -43,6 +43,7 @@ impl FileListItem {
                     None => Some(FileListItem::from(path, probe)),
                 },
                 Codec::MPEG2 => Some(FileListItem::from(path, probe)),
+                Codec::ProRes => Some(FileListItem::from(path, probe)),
             }
         }
     }
