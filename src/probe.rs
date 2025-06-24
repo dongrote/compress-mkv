@@ -77,7 +77,11 @@ pub fn probe_codec(path: &PathBuf) -> Result<Codec, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(Codec::from_str(deserialized.streams[0].codec_name.as_str()))
+        if deserialized.streams.len() > 0 {
+            Ok(Codec::from_str(deserialized.streams[0].codec_name.as_str()))
+        } else {
+            Err(Box::new(InputParseError::for_file(path, "ffprobe found zero streams.")))
+        }
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
@@ -97,7 +101,11 @@ pub fn probe_codec_tag(path: &PathBuf) -> Result<Option<String>, Box<dyn Error>>
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(deserialized.streams[0].codec_tag_string.clone())
+        if deserialized.streams.len() > 0 {
+            Ok(deserialized.streams[0].codec_tag_string.clone())
+        } else {
+            Ok(None)
+        }
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
@@ -117,7 +125,11 @@ pub fn probe_interlaced(path: &PathBuf) -> Result<bool, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(is_interlaced(&deserialized.streams[0]))
+        if deserialized.streams.len() > 0 {
+            Ok(is_interlaced(&deserialized.streams[0]))
+        } else {
+            Ok(false)
+        }
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
@@ -137,10 +149,14 @@ pub fn probe_resolution(path: &PathBuf) -> Result<Resolution, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(Resolution {
-            width: deserialized.streams[0].width,
-            height: deserialized.streams[0].height,
-        })
+        if deserialized.streams.len() > 0 {
+            Ok(Resolution {
+                width: deserialized.streams[0].width,
+                height: deserialized.streams[0].height,
+            })
+        } else {
+            Err(Box::new(InputParseError::for_file(path, "ffprobe found zero streams.")))
+        }
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
@@ -160,21 +176,25 @@ pub fn probe_file_fast(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(AVProbeMetadata {
-            video_codec: Codec::from_str(deserialized.streams[0].codec_name.as_str()),
-            video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
-            file_size: match fs::metadata(&path) {
-                Err(_) => None,
-                Ok(metadata) => Some(metadata.len() as usize),
-            },
-            resolution: Resolution {
-                width: deserialized.streams[0].width,
-                height: deserialized.streams[0].height,
-            },
-            total_frames: 0,
-            frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
-            interlaced: is_interlaced(&deserialized.streams[0]),
-        })
+        if deserialized.streams.len() > 0 {
+            Ok(AVProbeMetadata {
+                video_codec: Codec::from_str(deserialized.streams[0].codec_name.as_str()),
+                video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
+                file_size: match fs::metadata(&path) {
+                    Err(_) => None,
+                    Ok(metadata) => Some(metadata.len() as usize),
+                },
+                resolution: Resolution {
+                    width: deserialized.streams[0].width,
+                    height: deserialized.streams[0].height,
+                },
+                total_frames: 0,
+                frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
+                interlaced: is_interlaced(&deserialized.streams[0]),
+            })
+        } else {
+            Err(Box::new(InputParseError::for_file(path, "ffprobe found no data streams.")))
+        }
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
@@ -195,24 +215,28 @@ pub fn probe_file(path: &PathBuf) -> Result<AVProbeMetadata, Box<dyn Error>> {
     if output.status.success() {
         let utf8 = String::from_utf8(output.stdout)?;
         let deserialized = serde_json::from_str::<FFProbeJsonOutput>(&utf8)?;
-        Ok(AVProbeMetadata {
-            video_codec: Codec::from_str(deserialized.streams[0].codec_name.as_str()),
-            video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
-            file_size: match fs::metadata(&path) {
-                Err(_) => None,
-                Ok(metadata) => Some(metadata.len() as usize),
-            },
-            resolution: Resolution {
-                width: deserialized.streams[0].width,
-                height: deserialized.streams[0].height,
-            },
-            total_frames: match &deserialized.streams[0].nb_read_packets {
-                None => 1,
-                Some(tf) => tf.parse().unwrap_or(1),
-            },
-            frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
-            interlaced: is_interlaced(&deserialized.streams[0]),
-        })
+        if deserialized.streams.len() > 0 {
+            Ok(AVProbeMetadata {
+                video_codec: Codec::from_str(deserialized.streams[0].codec_name.as_str()),
+                video_codec_tag: deserialized.streams[0].codec_tag_string.clone(),
+                file_size: match fs::metadata(&path) {
+                    Err(_) => None,
+                    Ok(metadata) => Some(metadata.len() as usize),
+                },
+                resolution: Resolution {
+                    width: deserialized.streams[0].width,
+                    height: deserialized.streams[0].height,
+                },
+                total_frames: match &deserialized.streams[0].nb_read_packets {
+                    None => 1,
+                    Some(tf) => tf.parse().unwrap_or(1),
+                },
+                frame_rate: get_frame_rate(path, &deserialized.streams[0]).unwrap_or(300),
+                interlaced: is_interlaced(&deserialized.streams[0]),
+            })
+        } else {
+            Err(Box::new(InputParseError::for_file(path, "ffprobe found no data streams.")))
+        }
     } else {
         Err(Box::new(InputParseError::for_file(path, "ffprobe did not exit successfully.")))
     }
